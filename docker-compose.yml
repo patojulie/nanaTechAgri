@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: agri-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: agri_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - agri-network
+
+  # Redis for Notifications Queue
+  redis:
+    image: redis:7-alpine
+    container_name: agri-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - agri-network
+
+  # Backend API (optional, uncomment to run in docker)
+  # api:
+  #   build: .
+  #   container_name: agri-api
+  #   environment:
+  #     NODE_ENV: development
+  #     PORT: 3000
+  #     DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/agri_db"
+  #     REDIS_URL: "redis://redis:6379"
+  #     JWT_SECRET: dev_secret_change_in_production
+  #     JWT_REFRESH_SECRET: dev_refresh_secret_change_in_production
+  #   ports:
+  #     - "3000:3000"
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   volumes:
+  #     - .:/app
+  #     - /app/node_modules
+  #   networks:
+  #     - agri-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  agri-network:
+    driver: bridge

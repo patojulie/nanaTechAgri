@@ -1,0 +1,462 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ========================
+// ENUMS
+// ========================
+
+enum Role {
+  PRODUCTEUR
+  AGENT
+  COOPERATIVE
+  ACHETEUR
+  ADMIN
+}
+
+enum CanalAcces {
+  MOBILE_APP
+  WEB
+  USSD
+  SMS
+  VOCAL
+  AGENT_TERRAIN
+}
+
+enum StatutExploitation {
+  ACTIVE
+  INACTIVE
+  SUSPENDUE
+  EN_ATTENTE
+}
+
+enum StatutAnnonce {
+  PUBLIEE
+  VENDUE
+  ANNULEE
+  EN_ATTENTE_VALIDATION
+}
+
+enum StatutMiseEnRelation {
+  EN_ATTENTE
+  ACCEPTEE
+  REJETEE
+  FINALISEE
+  ECHAPPEE
+}
+
+enum StatutSynchronisation {
+  EN_ATTENTE
+  OK
+  ECHEC
+}
+
+enum TypeNotification {
+  SMS
+  VOCAL
+  USSD
+  EMAIL
+  PUSH
+}
+
+enum TypeExportDonnees {
+  CSV
+  EXCEL
+  PDF
+}
+
+// ========================
+// UTILISATEURS
+// ========================
+
+model Utilisateur {
+  id                   String       @id @default(cuid())
+  email                String       @unique
+  motDePasseHash       String
+  telephone            String?      @unique
+  nom                  String
+  prenom               String
+  photo                String?
+  role                 Role
+  canalAccesPreferences CanalAcces[]
+  dateCreation         DateTime     @default(now())
+  dateModification     DateTime     @updatedAt
+  actif                Boolean      @default(true)
+
+  // Relations
+  producteur           Producteur?
+  agent                Agent?
+  cooperative          Cooperative?
+  acheteur             Acheteur?
+  notifications        Notification[]
+  journalSync          JournalSynchronisation[]
+  auditLogs            AuditLog[]
+
+  @@index([email])
+  @@index([telephone])
+  @@index([role])
+}
+
+// ========================
+// PRODUCTEURS & EXPLOITATIONS
+// ========================
+
+model Producteur {
+  id                      String       @id @default(cuid())
+  utilisateurId           String       @unique
+  numeroPieceIdentification String?     // Chiffré au repos
+  typePieceIdentification String?      // Passport, Carte d'identité, etc.
+  dateEmissionPiece       DateTime?
+  adresse                 String
+  codePostal              String?
+  commune                 String
+  region                  String
+  geolocalisation         String?      // GeoJSON ou lat,lng
+  nombreAnnees            Int          // Expérience en années
+  dateInscription         DateTime     @default(now())
+
+  // Relations
+  utilisateur             Utilisateur  @relation(fields: [utilisateurId], references: [id], onDelete: Cascade)
+  exploitations           Exploitation[]
+  annonces                Annonce[]
+  miseEnRelations         MiseEnRelation[]
+  validations             ValidationFiche[]
+
+  @@index([utilisateurId])
+}
+
+model Exploitation {
+  id                      String       @id @default(cuid())
+  producteurId            String
+  nom                     String
+  superficieTotale        Float        // en hectares
+  typeExploitation        String[]     // CEREALES, MARAICHAGE, ELEVAGE, etc.
+  statut                  StatutExploitation @default(EN_ATTENTE)
+  adresse                 String
+  geolocalisation         String?      // GeoJSON
+  dateCreation            DateTime     @default(now())
+  dateModification        DateTime     @updatedAt
+  descriptionGeneral      String?
+
+  // Relations
+  producteur              Producteur   @relation(fields: [producteurId], references: [id], onDelete: Cascade)
+  activites               ActiviteExploitation[]
+  annonces                Annonce[]
+
+  @@index([producteurId])
+  @@index([statut])
+}
+
+model ActiviteExploitation {
+  id                      String       @id @default(cuid())
+  exploitationId          String
+  type                    String       // Type de culture/activité
+  superficieUtilisee      Float        // en hectares
+  rendementEstime         Float?       // kg/ha ou équivalent
+  periodeProduction       String?      // "Jan-Juin", "Année"
+  dateCreation            DateTime     @default(now())
+
+  // Relations
+  exploitation            Exploitation @relation(fields: [exploitationId], references: [id], onDelete: Cascade)
+
+  @@index([exploitationId])
+}
+
+// ========================
+// ANNONCES (Marketplace)
+// ========================
+
+model Annonce {
+  id                      String       @id @default(cuid())
+  producteurId            String
+  exploitationId          String?
+  titre                   String
+  description             String
+  typeProduction          String       // Même que ActiviteExploitation.type
+  quantiteDisponible      Float        // kg ou unité
+  unite                   String       // kg, tonnes, etc.
+  prixUnitaire            Float
+  devise                  String       @default("XOF")
+  statut                  StatutAnnonce @default(EN_ATTENTE_VALIDATION)
+  datePublication         DateTime?
+  dateCreation            DateTime     @default(now())
+  dateModification        DateTime     @updatedAt
+  dateExpiration          DateTime?
+  photos                  String[]     // URLs
+
+  // Relations
+  producteur              Producteur   @relation(fields: [producteurId], references: [id], onDelete: Cascade)
+  exploitation            Exploitation? @relation(fields: [exploitationId], references: [id], onDelete: SetNull)
+  miseEnRelations         MiseEnRelation[]
+  validations             ValidationFiche[]
+
+  @@index([producteurId])
+  @@index([statut])
+  @@index([typeProduction])
+  @@index([datePublication])
+}
+
+// ========================
+// AGENTS DE TERRAIN
+// ========================
+
+model Agent {
+  id                      String       @id @default(cuid())
+  utilisateurId           String       @unique
+  numeroIdentifiant       String       @unique
+  zone                    String       // Zone de couverture
+  dateAffectation         DateTime     @default(now())
+  statut                  String       @default("ACTIF") // ACTIF, INACTIF, SUSPENDU
+  derniereConnexion       DateTime?
+  dateCreation            DateTime     @default(now())
+
+  // Relations
+  utilisateur             Utilisateur  @relation(fields: [utilisateurId], references: [id], onDelete: Cascade)
+  enregistrementsCompte   EnregistrementCompte[]
+  synchronisations        JournalSynchronisation[]
+
+  @@index([utilisateurId])
+  @@index([zone])
+}
+
+model EnregistrementCompte {
+  id                      String       @id @default(cuid())
+  agentId                 String
+  typeSousacription       String       // Type de compte enregistré (producteur, etc.)
+  nombreAccounts          Int          @default(1)
+  dateEnregistrement      DateTime     @default(now())
+  details                 String?      // JSON avec détails supplémentaires
+
+  // Relations
+  agent                   Agent        @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId])
+}
+
+// ========================
+// COOPERATIVES & VALIDATION
+// ========================
+
+model Cooperative {
+  id                      String       @id @default(cuid())
+  utilisateurId           String       @unique
+  nomOfficial             String
+  numeroRegistration      String       @unique
+  adresse                 String
+  region                  String
+  telephone               String
+  email                   String
+  nombreMembres           Int          @default(0)
+  dateCreation            DateTime     @default(now())
+  dateModification        DateTime     @updatedAt
+
+  // Relations
+  utilisateur             Utilisateur  @relation(fields: [utilisateurId], references: [id], onDelete: Cascade)
+  validations             ValidationFiche[]
+  tableauDeBord           TableauDeBordCooperative?
+
+  @@index([utilisateurId])
+  @@index([region])
+}
+
+model ValidationFiche {
+  id                      String       @id @default(cuid())
+  cooperativeId           String
+  producteurId            String
+  annonceId               String?
+  statut                  String       @default("EN_ATTENTE") // EN_ATTENTE, VALIDEE, REJETEE
+  commentaires            String?
+  dateValidation          DateTime?
+  dateCreation            DateTime     @default(now())
+  dateModification        DateTime     @updatedAt
+
+  // Relations
+  cooperative             Cooperative  @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
+  producteur              Producteur   @relation(fields: [producteurId], references: [id], onDelete: Cascade)
+  annonce                 Annonce?     @relation(fields: [annonceId], references: [id], onDelete: SetNull)
+
+  @@index([cooperativeId])
+  @@index([producteurId])
+  @@index([statut])
+}
+
+model TableauDeBordCooperative {
+  id                      String       @id @default(cuid())
+  cooperativeId           String       @unique
+  totalProducteurs        Int          @default(0)
+  totalExploitations      Int          @default(0)
+  totalAnnonces           Int          @default(0)
+  totalValidations        Int          @default(0)
+  validationsEnCours      Int          @default(0)
+  dateModification        DateTime     @updatedAt
+
+  // Relations
+  cooperative             Cooperative  @relation(fields: [cooperativeId], references: [id], onDelete: Cascade)
+
+  @@index([cooperativeId])
+}
+
+// ========================
+// ACHETEURS & MISE EN RELATION
+// ========================
+
+model Acheteur {
+  id                      String       @id @default(cuid())
+  utilisateurId           String       @unique
+  typeSociete             String       // Entreprise, Transformateur, Distributeur, etc.
+  nomSociete              String?
+  adresseSociete          String?
+  telephone               String?
+  email                   String?
+  dateCreation            DateTime     @default(now())
+
+  // Relations
+  utilisateur             Utilisateur  @relation(fields: [utilisateurId], references: [id], onDelete: Cascade)
+  miseEnRelations         MiseEnRelation[]
+
+  @@index([utilisateurId])
+}
+
+model MiseEnRelation {
+  id                      String       @id @default(cuid())
+  annonceId               String
+  producteurId            String
+  acheteurId              String
+  statut                  StatutMiseEnRelation @default(EN_ATTENTE)
+  montantNegociation      Float?
+  quantiteNegociee        Float?
+  dateContactInitial      DateTime     @default(now())
+  dateAcceptation         DateTime?
+  dateRejection           DateTime?
+  dateFinalization        DateTime?
+  commentaires            String?
+
+  // Relations
+  annonce                 Annonce      @relation(fields: [annonceId], references: [id], onDelete: Cascade)
+  producteur              Producteur   @relation(fields: [producteurId], references: [id], onDelete: Cascade)
+  acheteur                Acheteur     @relation(fields: [acheteurId], references: [id], onDelete: Cascade)
+
+  @@index([annonceId])
+  @@index([producteurId])
+  @@index([acheteurId])
+  @@index([statut])
+}
+
+// ========================
+// SYNCHRONISATION OFFLINE
+// ========================
+
+model JournalSynchronisation {
+  id                      String       @id @default(cuid())
+  utilisateurId           String
+  agentId                 String
+  idClientGenere           String       @unique // Idempotence
+  nombreEnregistrements   Int
+  statut                  StatutSynchronisation @default(EN_ATTENTE)
+  dateCreationClient      DateTime     // Timestamp hors-ligne du client
+  dateSynchronisation     DateTime     @default(now())
+  payloadOperations       String       // JSON des opérations
+  messageErreur           String?
+  dateRetry               DateTime?
+
+  // Relations
+  utilisateur             Utilisateur  @relation(fields: [utilisateurId], references: [id], onDelete: Cascade)
+  agent                   Agent        @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([utilisateurId])
+  @@index([agentId])
+  @@index([statut])
+  @@index([idClientGenere])
+}
+
+// ========================
+// NOTIFICATIONS
+// ========================
+
+model Notification {
+  id                      String       @id @default(cuid())
+  utilisateurId           String
+  type                    TypeNotification
+  titre                   String
+  contenu                 String
+  dateEnvoi               DateTime?
+  dateCreation            DateTime     @default(now())
+  lu                      Boolean      @default(false)
+  dateLecture             DateTime?
+  statut                  String       @default("EN_ATTENTE") // EN_ATTENTE, ENVOYE, ECHEC
+
+  // Relations
+  utilisateur             Utilisateur  @relation(fields: [utilisateurId], references: [id], onDelete: Cascade)
+
+  @@index([utilisateurId])
+  @@index([statut])
+  @@index([type])
+}
+
+// ========================
+// EXPORT DONNEES
+// ========================
+
+model ExportDonnees {
+  id                      String       @id @default(cuid())
+  utilisateurId           String
+  type                    TypeExportDonnees
+  donnees                 String       // Données sérialisées (JSON ou CSV)
+  lienTelechargement      String?
+  dateCreation            DateTime     @default(now())
+  dateExpiration          DateTime
+  statut                  String       @default("EN_PREPARATION") // EN_PREPARATION, PRET, EXPIRE
+
+  @@index([utilisateurId])
+  @@index([statut])
+}
+
+// ========================
+// AUDIT & TRAÇABILITÉ
+// ========================
+
+model AuditLog {
+  id                      String       @id @default(cuid())
+  utilisateurId           String
+  action                  String       // CREATE, UPDATE, DELETE, VALIDATE, etc.
+  entite                  String       // Producteur, Annonce, ValidationFiche, etc.
+  entiteId                String
+  anciennesValeurs        String?      // JSON
+  nouvellesValeurs        String?      // JSON
+  ipAdresse               String?
+  userAgent               String?
+  dateCreation            DateTime     @default(now())
+
+  // Relations
+  utilisateur             Utilisateur  @relation(fields: [utilisateurId], references: [id], onDelete: SetNull)
+
+  @@index([utilisateurId])
+  @@index([action])
+  @@index([entite])
+  @@index([dateCreation])
+}
+
+// ========================
+// CANAL D'ACCES (Configuration)
+// ========================
+
+model ConfigurationCanal {
+  id                      String       @id @default(cuid())
+  canal                   CanalAcces
+  isActive                Boolean      @default(true)
+  priorite                Int          @default(0)
+  configJson              String?      // Configuration spécifique JSON
+  dateCreation            DateTime     @default(now())
+  dateModification        DateTime     @updatedAt
+
+  @@unique([canal])
+  @@index([isActive])
+}
