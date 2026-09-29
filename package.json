@@ -21,7 +21,11 @@
     "typecheck": "tsc --noEmit",
     "db:seed": "ts-node src/database/seed.ts",
     "db:create-admin": "ts-node src/database/create-admin.ts",
-    "db:drop": "ts-node -e \"require('typeorm').createConnection().then(c => c.dropDatabase()).then(() => process.exit(0))\""
+    "db:drop": "ts-node -e \"require('typeorm').createConnection().then(c => c.dropDatabase()).then(() => process.exit(0))\"",
+    "typeorm": "typeorm-ts-node-commonjs",
+    "migration:generate": "npm run typeorm -- migration:generate -d src/database/data-source.ts",
+    "migration:run": "npm run typeorm -- migration:run -d src/database/data-source.ts",
+    "migration:revert": "npm run typeorm -- migration:revert -d src/database/data-source.ts"
   },
   "dependencies": {
     "@nestjs/axios": "^3.0.2",

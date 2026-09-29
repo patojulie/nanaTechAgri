@@ -25,7 +25,12 @@ export const getTypeOrmConfig = (configService: ConfigService): TypeOrmModuleOpt
     type: 'postgres',
     ...connectionOptions,
     entities: EntityList,
-    synchronize: configService.get('NODE_ENV') === 'development', // AUTO-sync in dev only!
+    migrations: [__dirname + '/migrations/*{.ts,.js}'],
+    // En dev, synchronize crée/adapte le schéma automatiquement depuis les entités.
+    // Partout ailleurs (donc en production), le schéma vient des migrations versionnées,
+    // exécutées automatiquement au démarrage via migrationsRun.
+    synchronize: configService.get('NODE_ENV') === 'development',
+    migrationsRun: configService.get('NODE_ENV') !== 'development',
     logging: configService.get('NODE_ENV') === 'development',
     logger: 'advanced-console',
     dropSchema: false,

@@ -12,14 +12,21 @@ const ACHETEUR_EMAIL = process.env.ACHETEUR_EMAIL ?? 'acheteur@agri.local';
 const ACHETEUR_PASSWORD = process.env.ACHETEUR_PASSWORD ?? 'Acheteur123!';
 
 async function main() {
-  // Mêmes valeurs par défaut que src/database/typeorm.config.ts
-  const client = new Client({
-    host: process.env.DB_HOST ?? 'localhost',
-    port: Number(process.env.DB_PORT ?? 5433),
-    user: process.env.DB_USERNAME ?? 'postgres',
-    password: process.env.DB_PASSWORD ?? '1234',
-    database: process.env.DB_NAME ?? 'Agri_db',
-  });
+  // Mêmes règles que src/database/typeorm.config.ts : DATABASE_URL prioritaire
+  // (Railway), sinon variables séparées (local).
+  const databaseUrl = process.env.DATABASE_URL;
+  const client = databaseUrl
+    ? new Client({
+        connectionString: databaseUrl,
+        ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
+      })
+    : new Client({
+        host: process.env.DB_HOST ?? 'localhost',
+        port: Number(process.env.DB_PORT ?? 5433),
+        user: process.env.DB_USERNAME ?? 'postgres',
+        password: process.env.DB_PASSWORD ?? '1234',
+        database: process.env.DB_NAME ?? 'Agri_db',
+      });
 
   await client.connect();
 
