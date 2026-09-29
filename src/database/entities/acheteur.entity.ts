@@ -21,6 +21,12 @@ export class Acheteur {
   adresseSociete: string;
 
   @Column({ nullable: true })
+  region: string;
+
+  @Column({ default: 'Togo' })
+  pays: string;
+
+  @Column({ nullable: true })
   telephone: string;
 
   @Column({ nullable: true })

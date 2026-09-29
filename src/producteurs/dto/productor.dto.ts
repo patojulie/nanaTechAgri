@@ -31,6 +31,11 @@ export class CreateProductorDto {
   @IsString()
   region: string;
 
+  @ApiProperty({ example: 'Togo', required: false, default: 'Togo' })
+  @IsString()
+  @IsOptional()
+  pays?: string;
+
   @ApiProperty({ example: '12.5,-8.3', required: false })
   @IsString()
   @IsOptional()
@@ -62,6 +67,11 @@ export class UpdateProductorDto {
   @IsOptional()
   region?: string;
 
+  @ApiProperty({ example: 'Togo', required: false })
+  @IsString()
+  @IsOptional()
+  pays?: string;
+
   @ApiProperty({ example: '12.5,-8.3', required: false })
   @IsString()
   @IsOptional()
@@ -88,6 +98,9 @@ export class ProductorResponseDto {
 
   @ApiProperty()
   region: string;
+
+  @ApiProperty()
+  pays: string;
 
   @ApiProperty()
   yearsOfExperience: number;

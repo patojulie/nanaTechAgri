@@ -20,6 +20,7 @@ export * from './audit-log.entity';
 export * from './subscription.entity';
 export * from './subscription-feature.entity';
 export * from './subscription-usage.entity';
+export * from './subscription-plan.entity';
 export * from './payment.entity';
 
 // Enums
@@ -45,6 +46,7 @@ import { AuditLog } from './audit-log.entity';
 import { Subscription } from './subscription.entity';
 import { SubscriptionFeature } from './subscription-feature.entity';
 import { SubscriptionUsage } from './subscription-usage.entity';
+import { SubscriptionPlan } from './subscription-plan.entity';
 import { Payment } from './payment.entity';
 
 export const EntityList = [
@@ -67,5 +69,6 @@ export const EntityList = [
   Subscription,
   SubscriptionFeature,
   SubscriptionUsage,
+  SubscriptionPlan,
   Payment,
 ];

@@ -35,6 +35,9 @@ export class Producteur {
   @Column()
   region: string;
 
+  @Column({ default: 'Togo' })
+  pays: string;
+
   @Column({ nullable: true })
   geolocation: string;
 

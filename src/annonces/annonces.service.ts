@@ -9,10 +9,24 @@ export class AnnouncementsService {
 
   constructor(private typeorm: TypeOrmService) {}
 
-  async create(productorId: string, createAnnouncementDto: CreateAnnouncementDto): Promise<AnnouncementResponseDto> {
+  /**
+   * producerId doit toujours référencer Producteur.id (comme partout ailleurs dans
+   * l'API : GET /producteurs/{id}, membres de coopérative, etc.) — jamais l'id
+   * de l'utilisateur connecté. On résout donc systématiquement userId -> Producteur.id ici.
+   */
+  private async resolveProducerId(userId: string): Promise<string> {
+    const producteur = await this.typeorm.producteur.findOne({ where: { userId } });
+    if (!producteur) {
+      throw new BadRequestException("Aucun profil producteur associé à cet utilisateur");
+    }
+    return producteur.id;
+  }
+
+  async create(userId: string, createAnnouncementDto: CreateAnnouncementDto): Promise<AnnouncementResponseDto> {
+    const producerId = await this.resolveProducerId(userId);
     try {
       const announcement = await this.typeorm.annonce.save({
-        producerId: productorId,
+        producerId,
         title: createAnnouncementDto.title,
         description: createAnnouncementDto.description,
         productionType: createAnnouncementDto.productionType,
@@ -28,7 +42,7 @@ export class AnnouncementsService {
         status: StatutAnnonce.EN_ATTENTE_VALIDATION,
       } as any);
 
-      this.logger.log(`Announcement created: ${announcement.id} by producer ${productorId}`);
+      this.logger.log(`Announcement created: ${announcement.id} by producer ${producerId}`);
       return this.formatResponse(announcement);
     } catch (error) {
       this.logger.error(`Error during announcement creation: ${error.message}`);
@@ -45,15 +59,16 @@ export class AnnouncementsService {
       throw new NotFoundException(`Annonce avec l'ID ${id} non trouvée`);
     }
 
-    return this.formatResponse(announcement);
+    return this.enrichResponse(announcement);
   }
 
-  async findByProductor(productorId: string): Promise<AnnouncementResponseDto[]> {
+  async findByProductor(userId: string): Promise<AnnouncementResponseDto[]> {
+    const producerId = await this.resolveProducerId(userId);
     const announcements = await this.typeorm.annonce.find({
-      where: { producerId: productorId },
+      where: { producerId },
     });
 
-    return announcements.map((a) => this.formatResponse(a));
+    return this.enrichResponses(announcements);
   }
 
   async findByStatus(status: StatutAnnonce, skip = 0, take = 10): Promise<AnnouncementResponseDto[]> {
@@ -64,10 +79,14 @@ export class AnnouncementsService {
       order: { publicationDate: 'DESC' },
     });
 
-    return announcements.map((a) => this.formatResponse(a));
+    return this.enrichResponses(announcements);
   }
 
-  async findAll(skip = 0, take = 10): Promise<AnnouncementResponseDto[]> {
+  async findAll(
+    skip = 0,
+    take = 10,
+    filters: { productionType?: string; region?: string; pays?: string } = {},
+  ): Promise<AnnouncementResponseDto[]> {
     const announcements = await this.typeorm.annonce.find({
       where: { status: StatutAnnonce.PUBLIEE },
       skip,
@@ -75,7 +94,28 @@ export class AnnouncementsService {
       order: { publicationDate: 'DESC' },
     });
 
-    return announcements.map((a) => this.formatResponse(a));
+    const enriched = await this.enrichResponses(announcements);
+
+    return enriched.filter((a) => {
+      if (filters.productionType && a.productionType !== filters.productionType) return false;
+      if (filters.region && a.region !== filters.region) return false;
+      if (filters.pays && a.pays !== filters.pays) return false;
+      return true;
+    });
+  }
+
+  /**
+   * Mise à jour des photos uniquement — accessible à l'admin pour curer les visuels
+   * sans lui donner accès à l'édition commerciale complète (réservée au producteur).
+   */
+  async updatePhotos(id: string, photos: string[]): Promise<AnnouncementResponseDto> {
+    const announcement = await this.typeorm.annonce.findOne({ where: { id } });
+    if (!announcement) {
+      throw new NotFoundException(`Annonce avec l'ID ${id} non trouvée`);
+    }
+    announcement.photos = photos;
+    const updated = await this.typeorm.annonce.save(announcement);
+    return this.enrichResponse(updated);
   }
 
   async update(id: string, updateAnnouncementDto: UpdateAnnouncementDto): Promise<AnnouncementResponseDto> {
@@ -90,7 +130,7 @@ export class AnnouncementsService {
       const updated = await this.typeorm.annonce.save(announcement);
 
       this.logger.log(`Annonce mise à jour: ${id}`);
-      return this.formatResponse(updated);
+      return this.enrichResponse(updated);
     } catch (error) {
       throw new BadRequestException('Erreur lors de la mise à jour');
     }
@@ -124,7 +164,7 @@ export class AnnouncementsService {
     const updated = await this.typeorm.annonce.save(announcement);
 
     this.logger.log(`Annonce publiée: ${id}`);
-    return this.formatResponse(updated);
+    return this.enrichResponse(updated);
   }
 
   async validateAnnouncement(id: string, approved: boolean): Promise<AnnouncementResponseDto> {
@@ -140,7 +180,7 @@ export class AnnouncementsService {
 
     const action = approved ? 'validée' : 'rejetée';
     this.logger.log(`Annonce ${action}: ${id}`);
-    return this.formatResponse(updated);
+    return this.enrichResponse(updated);
   }
 
   private formatResponse(announcement: any): AnnouncementResponseDto {
@@ -153,9 +193,34 @@ export class AnnouncementsService {
       availableQuantity: announcement.availableQuantity,
       unitPrice: announcement.unitPrice,
       status: announcement.status,
+      photos: announcement.photos || [],
       publicationDate: announcement.publicationDate,
       createdAt: announcement.createdAt,
       updatedAt: announcement.updatedAt,
     };
+  }
+
+  /**
+   * Enrichit une annonce avec les infos de localisation du producteur
+   * (nécessaire pour l'affichage et le filtrage par région/pays côté admin).
+   */
+  private async enrichResponse(announcement: any): Promise<AnnouncementResponseDto> {
+    const base = this.formatResponse(announcement);
+    const producteur = await this.typeorm.producteur.findOne({ where: { id: announcement.producerId } });
+    if (!producteur) return base;
+
+    const utilisateur = await this.typeorm.utilisateur.findOne({ where: { id: producteur.userId } });
+
+    return {
+      ...base,
+      city: producteur.city,
+      region: producteur.region,
+      pays: producteur.pays,
+      producerName: utilisateur ? `${utilisateur.firstName} ${utilisateur.lastName}` : undefined,
+    };
+  }
+
+  private async enrichResponses(announcements: any[]): Promise<AnnouncementResponseDto[]> {
+    return Promise.all(announcements.map((a) => this.enrichResponse(a)));
   }
 }

@@ -29,6 +29,7 @@ export class ProducersService {
           postalCode: createProductorDto.postalCode,
           city: createProductorDto.city,
           region: createProductorDto.region,
+          pays: createProductorDto.pays || 'Togo',
           geolocation: createProductorDto.geolocation,
           yearsOfExperience: createProductorDto.yearsOfExperience,
       } as any);
@@ -114,6 +115,7 @@ export class ProducersService {
       address: productor.address,
       city: productor.city,
       region: productor.region,
+      pays: productor.pays,
       yearsOfExperience: productor.yearsOfExperience,
       registrationDate: productor.registrationDate,
     };

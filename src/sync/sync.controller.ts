@@ -1,6 +1,7 @@
 import { Controller, Post, Get, Param, Body, UseGuards, Req, Query, HttpCode } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { SyncService } from './sync.service';
+import { AgentManagedService } from '../agents/agent-managed.service';
 import { SyncBatchDto, SyncResponseDto, SyncJournalResponseDto } from './dto/sync.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -12,7 +13,10 @@ import { Role } from '../database/entities/utilisateur.entity';
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class SyncController {
-  constructor(private syncService: SyncService) {}
+  constructor(
+    private syncService: SyncService,
+    private managed: AgentManagedService,
+  ) {}
 
   @Post('batch')
   @Roles(Role.AGENT)
@@ -29,8 +33,8 @@ export class SyncController {
     @Req() req,
     @Body() syncBatchDto: SyncBatchDto,
   ): Promise<SyncResponseDto> {
-    // TODO: Récupérer agentId depuis l'utilisateur connecté
-    return this.syncService.syncBatch(req.user.id, 'agent-id', syncBatchDto);
+    const agent = await this.managed.getAgent(req.user.id);
+    return this.syncService.syncBatch(req.user.id, agent.id, syncBatchDto);
   }
 
   @Get('history')
@@ -56,8 +60,8 @@ export class SyncController {
   })
   @ApiResponse({ type: [SyncJournalResponseDto] })
   async getFailedSyncs(@Req() req): Promise<SyncJournalResponseDto[]> {
-    // TODO: Récupérer agentId depuis l'utilisateur
-    return this.syncService.getFailedSyncs('agent-id');
+    const agent = await this.managed.getAgent(req.user.id);
+    return this.syncService.getFailedSyncs(agent.id);
   }
 
   @Post(':journalId/retry')
@@ -69,15 +73,14 @@ export class SyncController {
     description: 'Réessaie de traiter un batch qui a échoué précédemment',
   })
   @ApiResponse({ type: SyncResponseDto })
-  async retrySyncBatch(@Param('journalId') journalId: string): Promise<SyncResponseDto> {
-    return this.syncService.retrySyncBatch(journalId);
+  async retrySyncBatch(@Req() req, @Param('journalId') journalId: string): Promise<SyncResponseDto> {
+    return this.syncService.retrySyncBatch(journalId, req.user.id);
   }
 
   @Get(':journalId')
   @ApiOperation({ summary: 'Obtenir les détails d\'une synchronisation' })
   @ApiResponse({ type: SyncJournalResponseDto })
-  async getSyncDetails(@Param('journalId') journalId: string): Promise<SyncJournalResponseDto> {
-    // TODO: Implémenter récupération des détails
-    return {} as SyncJournalResponseDto;
+  async getSyncDetails(@Req() req, @Param('journalId') journalId: string): Promise<SyncJournalResponseDto> {
+    return this.syncService.getSyncDetails(journalId, req.user.id);
   }
 }

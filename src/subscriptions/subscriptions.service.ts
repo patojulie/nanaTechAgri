@@ -5,6 +5,7 @@ import {
   Subscription,
   SubscriptionFeature,
   SubscriptionUsage,
+  SubscriptionPlan,
   Payment,
   SubscriptionTier,
   SubscriptionType,
@@ -15,10 +16,11 @@ import {
 import { CreateSubscriptionDto, ChangeSubscriptionTierDto, CancelSubscriptionDto, SubscriptionDto, CreatePaymentDto, PaymentDto, MatchingPreferencesDto } from './dto';
 
 /**
- * Configuration des tiers d'abonnement
- * Définit les limites et fonctionnalités par tier
+ * Valeurs de départ utilisées UNIQUEMENT pour amorcer la table subscription_plans
+ * la toute première fois (base vide). Une fois les lignes créées, c'est l'admin
+ * qui pilote prix/fonctionnalités depuis l'API — ces constantes ne sont plus lues.
  */
-const TIER_CONFIG = {
+const SEED_DEFAULTS = {
   [SubscriptionType.PRODUCTEUR]: {
     [SubscriptionTier.GRATUIT]: {
       features: {
@@ -123,7 +125,142 @@ export class SubscriptionsService {
     private usageRepo: Repository<SubscriptionUsage>,
     @InjectRepository(Payment)
     private paymentRepo: Repository<Payment>,
+    @InjectRepository(SubscriptionPlan)
+    private planRepo: Repository<SubscriptionPlan>,
   ) {}
+
+  /**
+   * Amorce la table subscription_plans avec les valeurs historiques si elle est
+   * vide (premier démarrage). Ensuite, seul l'admin la modifie via le CRUD ci-dessous.
+   */
+  private async ensureSeeded(): Promise<void> {
+    const count = await this.planRepo.count();
+    if (count > 0) return;
+
+    const rows: Partial<SubscriptionPlan>[] = [];
+    for (const type of Object.values(SubscriptionType)) {
+      const tiers = SEED_DEFAULTS[type];
+      let order = 0;
+      for (const [tier, cfg] of Object.entries(tiers)) {
+        rows.push({
+          type,
+          tier,
+          price: (cfg as any).price,
+          currency: 'FCFA',
+          billingCycleDays: (cfg as any).billingCycleDays,
+          features: (cfg as any).features,
+          isActive: true,
+          displayOrder: order++,
+        });
+      }
+    }
+    await this.planRepo.save(rows);
+  }
+
+  private async getPlan(type: SubscriptionType, tier: string): Promise<SubscriptionPlan> {
+    await this.ensureSeeded();
+    const plan = await this.planRepo.findOne({ where: { type, tier } });
+    if (!plan) {
+      throw new BadRequestException(`Aucune formule "${tier}" définie pour le type ${type}`);
+    }
+    return plan;
+  }
+
+  /**
+   * Catalogue des formules définies par l'admin pour un type d'abonnement.
+   */
+  async getAvailableTiers(type: SubscriptionType) {
+    await this.ensureSeeded();
+    const plans = await this.planRepo.find({
+      where: { type, isActive: true },
+      order: { displayOrder: 'ASC' },
+    });
+    return plans.map((p) => ({
+      id: p.id,
+      tier: p.tier,
+      price: p.price,
+      currency: p.currency,
+      billingCycleDays: p.billingCycleDays,
+      features: Object.entries(p.features).map(([featureKey, featureValue]) => ({
+        featureKey,
+        featureValue: typeof featureValue === 'boolean' ? (featureValue ? 1 : 0) : featureValue,
+      })),
+    }));
+  }
+
+  /**
+   * ===== CRUD des formules (Admin) =====
+   */
+  async listAllPlansForAdmin(): Promise<SubscriptionPlan[]> {
+    await this.ensureSeeded();
+    return this.planRepo.find({ order: { type: 'ASC', displayOrder: 'ASC' } });
+  }
+
+  async createPlan(data: {
+    type: SubscriptionType;
+    tier: string;
+    price: number;
+    currency?: string;
+    billingCycleDays?: number | null;
+    features?: Record<string, number | boolean | null>;
+    displayOrder?: number;
+  }): Promise<SubscriptionPlan> {
+    const plan = this.planRepo.create({
+      type: data.type,
+      tier: data.tier,
+      price: data.price,
+      currency: data.currency || 'FCFA',
+      billingCycleDays: data.billingCycleDays ?? null,
+      features: data.features || {},
+      isActive: true,
+      displayOrder: data.displayOrder ?? 0,
+    });
+    return this.planRepo.save(plan);
+  }
+
+  async updatePlan(
+    id: string,
+    data: Partial<{
+      price: number;
+      currency: string;
+      billingCycleDays: number | null;
+      features: Record<string, number | boolean | null>;
+      isActive: boolean;
+      displayOrder: number;
+    }>,
+  ): Promise<SubscriptionPlan> {
+    const plan = await this.planRepo.findOne({ where: { id } });
+    if (!plan) {
+      throw new NotFoundException('Formule introuvable');
+    }
+    Object.assign(plan, data);
+    return this.planRepo.save(plan);
+  }
+
+  async deletePlan(id: string): Promise<void> {
+    const plan = await this.planRepo.findOne({ where: { id } });
+    if (!plan) {
+      throw new NotFoundException('Formule introuvable');
+    }
+    await this.planRepo.remove(plan);
+  }
+
+  /**
+   * Vue admin : tous les abonnements de la plateforme, avec infos utilisateur,
+   * pour le dashboard Financement (aucun endpoint admin-wide n'existait avant).
+   */
+  async getAllSubscriptionsForAdmin(): Promise<any[]> {
+    const subscriptions = await this.subscriptionRepo.find({
+      relations: ['features', 'usage', 'user'],
+      order: { createdAt: 'DESC' },
+    });
+    return subscriptions.map((s) => ({
+      ...this.mapToDto(s),
+      userId: s.userId,
+      userName: s.user ? `${s.user.firstName} ${s.user.lastName}` : undefined,
+      userEmail: s.user?.email,
+    }));
+  }
 
   /**
    * Obtenir l'abonnement actif d'un utilisateur
@@ -176,16 +313,15 @@ export class SubscriptionsService {
       throw new NotFoundException('Abonnement non trouvé');
     }
 
-    // Vérifier que le nouveau tier existe
-    const tierConfig = TIER_CONFIG[type][changeDto.newTier];
-    if (!tierConfig) {
-      throw new BadRequestException('Tier d\'abonnement invalide');
-    }
+    // Vérifier que le nouveau tier existe (défini par l'admin)
+    const tierConfig = await this.getPlan(type, changeDto.newTier);
 
     // Mettre à jour le tier
     subscription.tier = changeDto.newTier;
     subscription.amount = changeDto.amount || tierConfig.price;
-    subscription.renewalDate = new Date(Date.now() + tierConfig.billingCycleDays * 24 * 60 * 60 * 1000);
+    subscription.renewalDate = tierConfig.billingCycleDays
+      ? new Date(Date.now() + tierConfig.billingCycleDays * 24 * 60 * 60 * 1000)
+      : null;
 
     await this.subscriptionRepo.save(subscription);
 
@@ -229,7 +365,8 @@ export class SubscriptionsService {
     });
 
     if (!subscription) {
-      return featureKey === FeatureKey.MAX_SMS_PER_MONTH && TIER_CONFIG[type][SubscriptionTier.GRATUIT].features[featureKey] === false;
+      const plan = await this.getPlan(type, SubscriptionTier.GRATUIT);
+      return featureKey === FeatureKey.MAX_SMS_PER_MONTH && plan.features[featureKey] === false;
     }
 
     const feature = subscription.features.find((f) => f.featureKey === featureKey);
@@ -246,8 +383,8 @@ export class SubscriptionsService {
     });
 
     if (!subscription) {
-      const config = TIER_CONFIG[type][SubscriptionTier.GRATUIT];
-      const value = config.features[featureKey];
+      const plan = await this.getPlan(type, SubscriptionTier.GRATUIT);
+      const value = plan.features[featureKey];
       return typeof value === 'number' ? value : null;
     }
 
@@ -341,8 +478,8 @@ export class SubscriptionsService {
    * Privé: Créer les features pour un tier
    */
   private async createFeaturesForTier(subscriptionId: string, tier: SubscriptionTier, type: SubscriptionType): Promise<void> {
-    const tierConfig = TIER_CONFIG[type][tier];
-    const features = tierConfig.features;
+    const plan = await this.getPlan(type, tier);
+    const features = plan.features;
 
     for (const [featureKey, featureValue] of Object.entries(features)) {
       const feature = this.featureRepo.create({

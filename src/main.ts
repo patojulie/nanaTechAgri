@@ -7,6 +7,8 @@ import { Logger } from '@nestjs/common';
 import { setupSwagger } from './config/swagger.config';
 
 async function bootstrap() {
+  // Les fichiers envoyés (photos, et demain audio/vidéo) sont hébergés sur Cloudinary —
+  // rien n'est écrit sur le disque du serveur, donc pas de dossier statique à servir ici.
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
   const logger = new Logger('Bootstrap');

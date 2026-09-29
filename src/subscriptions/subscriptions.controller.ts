@@ -1,12 +1,15 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { Role } from '../database/entities/utilisateur.entity';
 import { SubscriptionsService } from './subscriptions.service';
-import { CreateSubscriptionDto, ChangeSubscriptionTierDto, CancelSubscriptionDto, SubscriptionDto, CreatePaymentDto, PaymentDto, MatchingPreferencesDto } from './dto';
+import { CreateSubscriptionDto, ChangeSubscriptionTierDto, CancelSubscriptionDto, SubscriptionDto, CreatePaymentDto, PaymentDto, MatchingPreferencesDto, CreatePlanDto, UpdatePlanDto, PlanResponseDto } from './dto';
 import { SubscriptionType } from '../database/enums/subscription.enum';
 
 @ApiTags('Subscriptions')
-@Controller('api/subscriptions')
+@Controller('subscriptions')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth('JWT')
 export class SubscriptionsController {
@@ -171,8 +174,59 @@ export class SubscriptionsController {
     description: 'Tiers disponibles',
   })
   async getAvailableTiers(@Param('type') type: SubscriptionType): Promise<any> {
-    // TODO: Retourner la configuration des tiers
-    return { message: 'Tiers disponibles' };
+    return this.subscriptionService.getAvailableTiers(type);
+  }
+
+  /**
+   * Vue admin : tous les abonnements de la plateforme
+   */
+  @Get('admin/all')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Lister tous les abonnements de la plateforme (Admin)' })
+  @ApiResponse({ status: 200, description: 'Liste de tous les abonnements' })
+  async getAllForAdmin(): Promise<any[]> {
+    return this.subscriptionService.getAllSubscriptionsForAdmin();
+  }
+
+  /**
+   * ===== Gestion des formules d'abonnement (Admin) =====
+   * Les formules (prix, cycle de facturation, fonctionnalités) sont désormais
+   * définies et modifiables par l'admin, au lieu d'être codées en dur.
+   */
+  @Get('admin/plans')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Lister toutes les formules définies (Admin)' })
+  @ApiResponse({ status: 200, type: [PlanResponseDto] })
+  async listPlans(): Promise<PlanResponseDto[]> {
+    return this.subscriptionService.listAllPlansForAdmin() as any;
+  }
+
+  @Post('admin/plans')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Créer une formule (Admin)' })
+  @ApiResponse({ status: 201, type: PlanResponseDto })
+  async createPlan(@Body() dto: CreatePlanDto): Promise<PlanResponseDto> {
+    return this.subscriptionService.createPlan(dto) as any;
+  }
+
+  @Put('admin/plans/:id')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Modifier une formule (Admin)' })
+  @ApiResponse({ status: 200, type: PlanResponseDto })
+  async updatePlan(@Param('id') id: string, @Body() dto: UpdatePlanDto): Promise<PlanResponseDto> {
+    return this.subscriptionService.updatePlan(id, dto) as any;
+  }
+
+  @Delete('admin/plans/:id')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Supprimer une formule (Admin)' })
+  async deletePlan(@Param('id') id: string): Promise<void> {
+    return this.subscriptionService.deletePlan(id);
   }
 
   /**

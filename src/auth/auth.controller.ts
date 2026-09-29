@@ -1,7 +1,7 @@
 import { Controller, Post, Body, UseGuards, Get, Request, HttpCode } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import { RegisterDto, LoginDto, RefreshTokenDto, AuthResponseDto } from './dto/auth.dto';
+import { RegisterDto, LoginDto, RefreshTokenDto, AuthResponseDto, ChangePasswordDto } from './dto/auth.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 @ApiTags('Auth')
@@ -31,6 +31,16 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Token rafraîchi', type: AuthResponseDto })
   async refresh(@Body() refreshTokenDto: RefreshTokenDto): Promise<AuthResponseDto> {
     return this.authService.refreshToken(refreshTokenDto);
+  }
+
+  @Post('change-password')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Changer mon mot de passe (obligatoire après un mot de passe temporaire)' })
+  @ApiResponse({ status: 200, description: 'Mot de passe changé, nouveaux jetons émis', type: AuthResponseDto })
+  async changePassword(@Request() req, @Body() dto: ChangePasswordDto): Promise<AuthResponseDto> {
+    return this.authService.changePassword(req.user.id, dto);
   }
 
   @Get('profile')

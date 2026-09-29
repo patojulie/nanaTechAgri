@@ -138,6 +138,28 @@ export class UserAuthResponseDto {
     example: '2024-01-10T14:23:00Z',
   })
   createdAt: Date;
+
+  @ApiPropertyOptional({
+    description: 'Vrai si le mot de passe est temporaire (compte créé par un agent) : changement obligatoire',
+    example: false,
+  })
+  mustChangePassword?: boolean;
+}
+
+/**
+ * DTO de changement de mot de passe (utilisateur connecté)
+ */
+export class ChangePasswordDto {
+  @ApiProperty({ description: 'Mot de passe actuel (ou temporaire)' })
+  @IsString()
+  @IsNotEmpty()
+  currentPassword: string;
+
+  @ApiProperty({ description: 'Nouveau mot de passe (min 8 caractères)', minLength: 8 })
+  @IsString()
+  @MinLength(8)
+  @IsNotEmpty()
+  newPassword: string;
 }
 
 /**

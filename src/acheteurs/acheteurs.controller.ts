@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Delete,
   Param,
   Body,
@@ -15,10 +16,13 @@ import { BuyersService } from './acheteurs.service';
 import {
   CreateMiseEnRelationDto,
   MiseEnRelationResponseDto,
+  RespondMiseEnRelationDto,
   AnnouncementSearchResponseDto,
   SearchFiltersDto,
   CartResponseDto,
   RecommendationDto,
+  CreateAcheteurDto,
+  AcheteurResponseDto,
 } from './dto/acheteur.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -29,6 +33,64 @@ import { Role } from '../database/entities/utilisateur.entity';
 @Controller('acheteurs')
 export class BuyersController {
   constructor(private buyersService: BuyersService) {}
+
+  /**
+   * ============================================================================
+   * PROFIL ACHETEUR
+   * ============================================================================
+   */
+
+  @Post()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ACHETEUR)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Créer mon profil acheteur' })
+  @ApiResponse({ status: 201, type: AcheteurResponseDto })
+  async createProfile(@Req() req, @Body() dto: CreateAcheteurDto): Promise<AcheteurResponseDto> {
+    return this.buyersService.createProfile(req.user.id, dto);
+  }
+
+  @Get('my-profile')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Obtenir mon profil acheteur' })
+  @ApiResponse({ type: AcheteurResponseDto })
+  async getMyProfile(@Req() req): Promise<AcheteurResponseDto> {
+    return this.buyersService.getProfileByUserId(req.user.id);
+  }
+
+  @Get('admin/all')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Lister tous les profils acheteurs de la plateforme (Admin)' })
+  @ApiResponse({ type: [AcheteurResponseDto] })
+  async getAllProfilesForAdmin(): Promise<AcheteurResponseDto[]> {
+    return this.buyersService.listAllForAdmin();
+  }
+
+  @Put('admin/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Modifier un profil acheteur (Admin)' })
+  @ApiResponse({ type: AcheteurResponseDto })
+  async updateProfileAsAdmin(
+    @Param('id') id: string,
+    @Body() dto: Partial<CreateAcheteurDto>,
+  ): Promise<AcheteurResponseDto> {
+    return this.buyersService.updateProfile(id, dto);
+  }
+
+  @Get('admin/relations')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Lister toutes les mises en relation acheteur ↔ producteur (Admin)' })
+  @ApiResponse({ type: [MiseEnRelationResponseDto] })
+  async getAllRelationsForAdmin(): Promise<MiseEnRelationResponseDto[]> {
+    return this.buyersService.getAllRelationshipsForAdmin();
+  }
 
   /**
    * ============================================================================
@@ -179,9 +241,8 @@ export class BuyersController {
    */
 
   @Post('requests')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ACHETEUR)
-  @UseGuards(RolesGuard)
   @ApiBearerAuth()
   @HttpCode(201)
   @ApiOperation({
@@ -209,9 +270,8 @@ export class BuyersController {
   }
 
   @Get('requests')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ACHETEUR)
-  @UseGuards(RolesGuard)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Consulter mes demandes d\'achat (ACHETEUR)',
@@ -242,6 +302,74 @@ export class BuyersController {
     return this.buyersService.getMyRequests(req.user.id, skip, take);
   }
 
+  /**
+   * ============================================================================
+   * DEMANDES REÇUES (PRODUCTEUR)
+   * ============================================================================
+   */
+
+  @Get('requests/received')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.PRODUCTEUR)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Consulter les demandes d\'achat reçues (PRODUCTEUR)',
+    description: 'Récupère toutes les demandes d\'achat envoyées par des acheteurs sur mes annonces',
+  })
+  @ApiQuery({
+    name: 'skip',
+    required: false,
+    type: Number,
+    example: 0,
+  })
+  @ApiQuery({
+    name: 'take',
+    required: false,
+    type: Number,
+    example: 10,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Liste des demandes reçues',
+    type: [MiseEnRelationResponseDto],
+  })
+  async getReceivedRequests(
+    @Req() req,
+    @Query('skip') skip = 0,
+    @Query('take') take = 10,
+  ): Promise<MiseEnRelationResponseDto[]> {
+    return this.buyersService.getRequestsForProducer(req.user.id, skip, take);
+  }
+
+  @Put('requests/:id/respond')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.PRODUCTEUR)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Accepter ou refuser une demande d\'achat (PRODUCTEUR)',
+    description: 'Le producteur répond à une demande d\'achat reçue sur une de ses annonces',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'ID de la demande d\'achat',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Demande mise à jour',
+    type: MiseEnRelationResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Demande non trouvée',
+  })
+  async respondToRequest(
+    @Req() req,
+    @Param('id') relationshipId: string,
+    @Body() dto: RespondMiseEnRelationDto,
+  ): Promise<MiseEnRelationResponseDto> {
+    return this.buyersService.respondToRequest(req.user.id, relationshipId, dto);
+  }
+
   @Get('requests/:id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
@@ -262,9 +390,8 @@ export class BuyersController {
   }
 
   @Delete('requests/:id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ACHETEUR)
-  @UseGuards(RolesGuard)
   @ApiBearerAuth()
   @HttpCode(204)
   @ApiOperation({
@@ -297,9 +424,8 @@ export class BuyersController {
    */
 
   @Get('cart')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ACHETEUR)
-  @UseGuards(RolesGuard)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Consulter mon panier (ACHETEUR)',
@@ -314,9 +440,8 @@ export class BuyersController {
   }
 
   @Post('cart/add')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ACHETEUR)
-  @UseGuards(RolesGuard)
   @ApiBearerAuth()
   @HttpCode(200)
   @ApiOperation({
@@ -335,9 +460,8 @@ export class BuyersController {
   }
 
   @Delete('cart/remove/:announcementId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ACHETEUR)
-  @UseGuards(RolesGuard)
   @ApiBearerAuth()
   @HttpCode(200)
   @ApiOperation({
@@ -352,9 +476,8 @@ export class BuyersController {
   }
 
   @Delete('cart/clear')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ACHETEUR)
-  @UseGuards(RolesGuard)
   @ApiBearerAuth()
   @HttpCode(204)
   @ApiOperation({
@@ -372,9 +495,8 @@ export class BuyersController {
    */
 
   @Get('recommendations')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ACHETEUR)
-  @UseGuards(RolesGuard)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Obtenir recommandations personnalisées (ACHETEUR)',
@@ -404,9 +526,8 @@ export class BuyersController {
    */
 
   @Get('purchase-history')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ACHETEUR)
-  @UseGuards(RolesGuard)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Consulter historique achats (ACHETEUR)',
@@ -431,9 +552,8 @@ export class BuyersController {
   }
 
   @Get('favorites')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ACHETEUR)
-  @UseGuards(RolesGuard)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Consulter produits favoris (ACHETEUR)',
@@ -444,9 +564,8 @@ export class BuyersController {
   }
 
   @Get('spending-metrics')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ACHETEUR)
-  @UseGuards(RolesGuard)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Consulter statistiques dépenses (ACHETEUR)',

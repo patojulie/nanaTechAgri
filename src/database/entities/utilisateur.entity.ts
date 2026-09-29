@@ -65,6 +65,19 @@ export class Utilisateur {
   @Column({ default: true })
   active: boolean;
 
+  /** Possède un smartphone (sinon relais par SMS/appel via l'agent). */
+  @Column({ default: true })
+  hasSmartphone: boolean;
+
+  /** Compte créé par un agent avec mot de passe temporaire : changement forcé à la 1re connexion. */
+  @Column({ default: false })
+  mustChangePassword: boolean;
+
+  /** Agent (agents.id) qui a inscrit ce compte sur le terrain, le cas échéant. */
+  @Index()
+  @Column({ type: 'uuid', nullable: true })
+  createdByAgentId: string | null;
+
   // Relations
   @OneToOne(() => Producteur, (producteur) => producteur.utilisateur, { nullable: true })
   producteur: Producteur;

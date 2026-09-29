@@ -45,5 +45,8 @@ yarn-error.log*
 prisma/migrations/*
 !prisma/migrations/.gitkeep
 
+# Fichiers uploadés localement (le projet utilise Cloudinary, rien ne doit rester ici)
+/uploads
+
 # OS
 Thumbs.db

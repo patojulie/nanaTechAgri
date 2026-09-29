@@ -1,14 +1,26 @@
-import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { TypeOrmService } from '../database/typeorm.service';
 import { SyncBatchDto, SyncResponseDto, SyncJournalResponseDto } from './dto/sync.dto';
 import { StatutSynchronisation } from '../database/entities/journal-synchronisation.entity';
 import { v4 as uuidv4 } from 'uuid';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
+import { AgentManagedService } from '../agents/agent-managed.service';
+import {
+  CreateManagedUserDto,
+  UpdateManagedUserDto,
+  CreateManagedFarmDto,
+  UpdateManagedFarmDto,
+} from '../agents/dto/managed.dto';
 
 @Injectable()
 export class SyncService {
   private logger = new Logger('SyncService');
 
-  constructor(private typeorm: TypeOrmService) {}
+  constructor(
+    private typeorm: TypeOrmService,
+    private managed: AgentManagedService,
+  ) {}
 
   /**
    * Synchroniser un lot d'opérations hors-ligne
@@ -47,7 +59,7 @@ export class SyncService {
         dateCreationClient: new Date(dateCreationClient),
         nombreEnregistrements: operations.length,
         statut: StatutSynchronisation.EN_ATTENTE,
-        payloadOperations: JSON.stringify(operations),
+        payloadOperations: JSON.stringify(operations.map((op) => this.redactSecrets(op))),
       }),
     );
 
@@ -102,14 +114,25 @@ export class SyncService {
     const { entity, operation: operationType, id, timestamp, data } = operation;
     const operationTime = new Date(timestamp);
 
+    // Un agent n'a jamais le droit de supprimer : seul un admin désactive un compte.
+    if (String(operationType).toUpperCase() === 'DELETE') {
+      throw new ForbiddenException('La suppression est interdite pour un agent de terrain');
+    }
+
     switch (entity.toUpperCase()) {
-      case 'PRODUCTEUR':
-        await this.handleProductorOperation(operationType, id, data, operationTime, userId);
+      case 'UTILISATEUR':
+        await this.handleManagedUser(operationType, id, data, operationTime, userId);
         break;
 
       case 'EXPLOITATION':
-        await this.handleFarmOperation(operationType, id, data, operationTime, userId);
+        await this.handleManagedFarm(operationType, id, data, operationTime, userId);
         break;
+
+      case 'PRODUCTEUR':
+      case 'ACHETEUR':
+        throw new BadRequestException(
+          `Entité ${entity} : utiliser UTILISATEUR (le profil est imbriqué dans le compte)`,
+        );
 
       case 'ACTIVITE':
         await this.handleActivityOperation(operationType, id, data, operationTime, userId);
@@ -124,7 +147,7 @@ export class SyncService {
     }
   }
 
-  private async handleProductorOperation(
+  private async handleManagedUser(
     operationType: string,
     id: string,
     data: any,
@@ -132,40 +155,22 @@ export class SyncService {
     userId: string,
   ): Promise<void> {
     switch (operationType.toUpperCase()) {
-      case 'CREATE':
-        const existing = await this.typeorm.producteur.findOne({ where: { id } });
-        if (!existing) {
-          await this.typeorm.producteur.save(
-            this.typeorm.producteur.create({ id, utilisateurId: userId, ...data }),
-          );
-        } else {
-          Object.assign(existing, data);
-          await this.typeorm.producteur.save(existing);
-        }
+      case 'CREATE': {
+        const dto = await this.toDto(CreateManagedUserDto, { ...data, id });
+        await this.managed.createUser(userId, dto);
         break;
-
-      case 'UPDATE':
-        const prod = await this.typeorm.producteur.findOne({ where: { id } });
-        // Last-write-wins
-        if (prod && new Date(prod.updatedAt) < timestamp) {
-          Object.assign(prod, data);
-          await this.typeorm.producteur.save(prod);
-        }
+      }
+      case 'UPDATE': {
+        const dto = await this.toDto(UpdateManagedUserDto, data);
+        await this.managed.updateUser(userId, id, dto, { clientTimestamp: timestamp });
         break;
-
-      case 'DELETE':
-        const toDelete = await this.typeorm.producteur.findOne({ where: { id } });
-        if (toDelete) {
-          await this.typeorm.producteur.remove(toDelete);
-        }
-        break;
-
+      }
       default:
         throw new BadRequestException(`Opération non supportée: ${operationType}`);
     }
   }
 
-  private async handleFarmOperation(
+  private async handleManagedFarm(
     operationType: string,
     id: string,
     data: any,
@@ -173,36 +178,38 @@ export class SyncService {
     userId: string,
   ): Promise<void> {
     switch (operationType.toUpperCase()) {
-      case 'CREATE':
-        const existing = await this.typeorm.exploitation.findOne({ where: { id } });
-        if (!existing) {
-          await this.typeorm.exploitation.save(
-            this.typeorm.exploitation.create({ id, ...data }),
-          );
-        } else {
-          Object.assign(existing, data);
-          await this.typeorm.exploitation.save(existing);
-        }
+      case 'CREATE': {
+        const dto = await this.toDto(CreateManagedFarmDto, { ...data, id });
+        await this.managed.createFarm(userId, dto);
         break;
-
-      case 'UPDATE':
-        const farm = await this.typeorm.exploitation.findOne({ where: { id } });
-        if (farm && new Date(farm.updatedAt) < timestamp) {
-          Object.assign(farm, data);
-          await this.typeorm.exploitation.save(farm);
-        }
+      }
+      case 'UPDATE': {
+        const dto = await this.toDto(UpdateManagedFarmDto, data);
+        await this.managed.updateFarm(userId, id, dto, { clientTimestamp: timestamp });
         break;
-
-      case 'DELETE':
-        const toDelete = await this.typeorm.exploitation.findOne({ where: { id } });
-        if (toDelete) {
-          await this.typeorm.exploitation.remove(toDelete);
-        }
-        break;
-
+      }
       default:
         throw new BadRequestException(`Opération non supportée: ${operationType}`);
     }
+  }
+
+  /** Les données d'un lot ne passent pas par le ValidationPipe HTTP : on les valide ici. */
+  private async toDto<T extends object>(cls: new () => T, data: unknown): Promise<T> {
+    const instance = plainToInstance(cls, data ?? {}, { enableImplicitConversion: true });
+    const errors = await validate(instance, { whitelist: true, forbidNonWhitelisted: true });
+    if (errors.length > 0) {
+      const messages = errors.flatMap((e) => Object.values(e.constraints ?? { [e.property]: 'invalide' }));
+      throw new BadRequestException(messages.join('; '));
+    }
+    return instance;
+  }
+
+  /** Le journal ne doit jamais conserver un mot de passe temporaire en clair. */
+  private redactSecrets(operation: any): any {
+    if (operation?.data && typeof operation.data === 'object' && 'temporaryPassword' in operation.data) {
+      return { ...operation, data: { ...operation.data, temporaryPassword: '[REDACTED]' } };
+    }
+    return operation;
   }
 
   private async handleActivityOperation(
@@ -319,16 +326,18 @@ export class SyncService {
   /**
    * Rejouer une synchronisation échouée
    */
-  async retrySyncBatch(journalId: string): Promise<SyncResponseDto> {
-    const journal = await this.typeorm.journalSynchronisation.findOne({
-      where: { id: journalId },
-    });
-
-    if (!journal) {
-      throw new NotFoundException(`Journal de synchronisation ${journalId} non trouvé`);
-    }
+  async retrySyncBatch(journalId: string, userId: string): Promise<SyncResponseDto> {
+    const journal = await this.findOwnedJournal(journalId, userId);
 
     const operations = JSON.parse(journal.payloadOperations);
+
+    // Les mots de passe temporaires ne sont pas conservés : rejouer côté serveur créerait
+    // un compte dont personne ne connaît le mot de passe.
+    if (operations.some((op: any) => op?.data?.temporaryPassword === '[REDACTED]')) {
+      throw new BadRequestException(
+        "Ce lot contient des créations de compte : rejouez-le depuis l'application (mot de passe temporaire non conservé côté serveur)",
+      );
+    }
 
     // Générer un nouveau UUID pour le retry (pour garantir l'idempotence du retry)
     const retryBatch: SyncBatchDto = {
@@ -338,6 +347,18 @@ export class SyncService {
     };
 
     return this.syncBatch(journal.utilisateurId, journal.agentId, retryBatch);
+  }
+
+  async getSyncDetails(journalId: string, userId: string): Promise<SyncJournalResponseDto> {
+    return this.formatJournalResponse(await this.findOwnedJournal(journalId, userId));
+  }
+
+  private async findOwnedJournal(journalId: string, userId: string) {
+    const journal = await this.typeorm.journalSynchronisation.findOne({ where: { id: journalId } });
+    if (!journal || journal.utilisateurId !== userId) {
+      throw new NotFoundException(`Journal de synchronisation ${journalId} non trouvé`);
+    }
+    return journal;
   }
 
   private formatJournalResponse(journal: any): SyncJournalResponseDto {

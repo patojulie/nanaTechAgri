@@ -3,11 +3,12 @@ import { DatabaseModule } from '../database/database.module';
 import { AuthModule } from '../auth/auth.module';
 import { FieldAgentsService } from './agents.service';
 import { FieldAgentsController } from './agents.controller';
+import { AgentManagedService } from './agent-managed.service';
 
 @Module({
   imports: [DatabaseModule, AuthModule],
-  providers: [FieldAgentsService],
+  providers: [FieldAgentsService, AgentManagedService],
   controllers: [FieldAgentsController],
-  exports: [FieldAgentsService],
+  exports: [FieldAgentsService, AgentManagedService],
 })
 export class FieldAgentsModule {}

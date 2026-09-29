@@ -1,5 +1,76 @@
-import { IsString, IsNumber, IsOptional, IsUUID, IsNotEmpty, IsEnum, Min, Max } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsUUID, IsNotEmpty, IsEnum, Min, Max, IsEmail } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+/**
+ * DTO Créer mon profil acheteur
+ */
+export class CreateAcheteurDto {
+  @ApiProperty({ example: 'ENTREPRISE', description: 'Type de société (ENTREPRISE, RESTAURANT, DISTRIBUTEUR, PARTICULIER...)' })
+  @IsString()
+  typeSociete: string;
+
+  @ApiPropertyOptional({ example: 'Sahel Food Distribution' })
+  @IsString()
+  @IsOptional()
+  nomSociete?: string;
+
+  @ApiPropertyOptional({ example: 'Zone industrielle, Lomé' })
+  @IsString()
+  @IsOptional()
+  adresseSociete?: string;
+
+  @ApiPropertyOptional({ example: 'Maritime' })
+  @IsString()
+  @IsOptional()
+  region?: string;
+
+  @ApiPropertyOptional({ example: 'Togo', default: 'Togo' })
+  @IsString()
+  @IsOptional()
+  pays?: string;
+
+  @ApiPropertyOptional({ example: '+22870333003' })
+  @IsString()
+  @IsOptional()
+  telephone?: string;
+
+  @ApiPropertyOptional({ example: 'contact@sahelfood.test' })
+  @IsEmail()
+  @IsOptional()
+  email?: string;
+}
+
+export class AcheteurResponseDto {
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty()
+  userId: string;
+
+  @ApiProperty()
+  typeSociete: string;
+
+  @ApiPropertyOptional()
+  nomSociete?: string;
+
+  @ApiPropertyOptional()
+  adresseSociete?: string;
+
+  @ApiPropertyOptional()
+  region?: string;
+
+  @ApiProperty()
+  pays: string;
+
+  @ApiPropertyOptional()
+  telephone?: string;
+
+  @ApiPropertyOptional()
+  email?: string;
+
+  @ApiProperty()
+  createdAt: Date;
+}
 
 /**
  * DTO Créer une mise en relation (Demande d'achat)

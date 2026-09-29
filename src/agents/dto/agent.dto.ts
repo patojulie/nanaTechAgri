@@ -2,6 +2,10 @@ import { IsString, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateFieldAgentDto {
+  @ApiProperty({ example: 'user-123-uuid', description: "ID de l'utilisateur à transformer en agent de terrain" })
+  @IsString()
+  userId: string;
+
   @ApiProperty({ example: 'AGENT-001' })
   @IsString()
   identificationNumber: string;

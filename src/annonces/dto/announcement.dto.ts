@@ -80,6 +80,12 @@ export class UpdateAnnouncementDto {
   expirationDate?: string;
 }
 
+export class UpdatePhotosDto {
+  @ApiProperty({ example: ['https://exemple.com/photo1.jpg'], type: [String] })
+  @IsArray()
+  photos: string[];
+}
+
 export class AnnouncementResponseDto {
   @ApiProperty()
   id: string;
@@ -104,6 +110,21 @@ export class AnnouncementResponseDto {
 
   @ApiProperty()
   status: StatutAnnonce;
+
+  @ApiProperty({ type: [String] })
+  photos: string[];
+
+  @ApiProperty({ required: false, description: 'Nom complet du producteur' })
+  producerName?: string;
+
+  @ApiProperty({ required: false, description: 'Ville du producteur' })
+  city?: string;
+
+  @ApiProperty({ required: false, description: 'Région du producteur' })
+  region?: string;
+
+  @ApiProperty({ required: false, description: 'Pays du producteur' })
+  pays?: string;
 
   @ApiProperty()
   publicationDate: Date;

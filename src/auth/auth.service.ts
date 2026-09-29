@@ -3,7 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { TypeOrmService } from '../database/typeorm.service';
-import { RegisterDto, LoginDto, RefreshTokenDto, AuthResponseDto } from './dto/auth.dto';
+import { RegisterDto, LoginDto, RefreshTokenDto, AuthResponseDto, ChangePasswordDto } from './dto/auth.dto';
 import { Role } from '../database/entities';
 
 @Injectable()
@@ -107,6 +107,27 @@ export class AuthService {
     }
   }
 
+  async changePassword(userId: string, dto: ChangePasswordDto): Promise<AuthResponseDto> {
+    const user = await this.typeorm.utilisateur.findOne({ where: { id: userId } });
+    if (!user || !user.active) {
+      throw new UnauthorizedException('Invalid user');
+    }
+
+    if (!(await bcrypt.compare(dto.currentPassword, user.passwordHash))) {
+      throw new UnauthorizedException('Mot de passe actuel incorrect');
+    }
+    if (dto.currentPassword === dto.newPassword) {
+      throw new BadRequestException("Le nouveau mot de passe doit être différent de l'actuel");
+    }
+
+    user.passwordHash = await bcrypt.hash(dto.newPassword, this.SALT_ROUNDS);
+    user.mustChangePassword = false;
+    const saved = await this.typeorm.utilisateur.save(user);
+
+    this.logger.log(`Password changed: ${userId}`);
+    return this.generateTokensAndResponse(saved);
+  }
+
   async validateUser(id: string) {
     const user = await this.typeorm.utilisateur.findOne({
       where: { id },
@@ -145,6 +166,7 @@ export class AuthService {
         role: user.role,
         isActive: user.isActive || true,
         createdAt: user.createdAt || new Date(),
+        mustChangePassword: !!user.mustChangePassword,
       },
     };
   }
