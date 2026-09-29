@@ -13,7 +13,7 @@ RUN npm ci
 COPY . .
 
 # Build TypeScript (NestJS)
-RUN npm run build && ls -la dist
+RUN npm run build
 
 # Production stage
 FROM node:20-alpine
@@ -26,7 +26,6 @@ RUN npm ci --omit=dev
 
 # Copier le build compilé depuis le stage précédent
 COPY --from=builder /app/dist ./dist
-RUN ls -la /app/dist
 
 # Expose port
 EXPOSE 3000
