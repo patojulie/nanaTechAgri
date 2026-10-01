@@ -78,6 +78,17 @@ export class Utilisateur {
   @Column({ type: 'uuid', nullable: true })
   createdByAgentId: string | null;
 
+  /** Moyenne des notes reçues (module Évaluations), recalculée à chaque nouvelle évaluation. */
+  @Column('float', { default: 0 })
+  noteMoyenneRecue: number;
+
+  @Column('int', { default: 0 })
+  nombreEvaluationsRecues: number;
+
+  /** Code Langue.code (référentiel `langues`) — pilote SMS/chatbot et l'UI à terme. */
+  @Column({ default: 'fr' })
+  languePrefereeCode: string;
+
   // Relations
   @OneToOne(() => Producteur, (producteur) => producteur.utilisateur, { nullable: true })
   producteur: Producteur;

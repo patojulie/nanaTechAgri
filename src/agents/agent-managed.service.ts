@@ -13,6 +13,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { TypeOrmService } from '../database/typeorm.service';
 import { Agent, Role, Utilisateur, Exploitation, CanalAcces } from '../database/entities';
 import { FarmResponseDto } from '../exploitations/dto/farm.dto';
+import { LanguesService } from '../langues/langues.service';
 import {
   CreateManagedUserDto,
   UpdateManagedUserDto,
@@ -44,7 +45,10 @@ export interface ManagedWriteOptions {
 export class AgentManagedService {
   private logger = new Logger('AgentManagedService');
 
-  constructor(private typeorm: TypeOrmService) {}
+  constructor(
+    private typeorm: TypeOrmService,
+    private languesService: LanguesService,
+  ) {}
 
   // ---------------------------------------------------------------- utilisateurs
 
@@ -80,6 +84,8 @@ export class AgentManagedService {
     const generated = dto.temporaryPassword ? undefined : this.generateTemporaryPassword();
     const passwordHash = await bcrypt.hash(dto.temporaryPassword ?? generated!, 10);
     const hasSmartphone = dto.hasSmartphone ?? true;
+    const languePrefereeCode = dto.languePreferee ?? 'fr';
+    await this.languesService.assertValide(languePrefereeCode);
 
     const user = await this.typeorm.utilisateur.save(
       this.typeorm.utilisateur.create({
@@ -91,6 +97,7 @@ export class AgentManagedService {
         phone: dto.phone,
         role: dto.role,
         hasSmartphone,
+        languePrefereeCode,
         mustChangePassword: true,
         createdByAgentId: agent.id,
         accessChannelPreferences: this.channelsFor(hasSmartphone),
@@ -167,6 +174,10 @@ export class AgentManagedService {
     if (dto.hasSmartphone !== undefined) {
       user.hasSmartphone = dto.hasSmartphone;
       user.accessChannelPreferences = this.channelsFor(dto.hasSmartphone);
+    }
+    if (dto.languePreferee !== undefined) {
+      await this.languesService.assertValide(dto.languePreferee);
+      user.languePrefereeCode = dto.languePreferee;
     }
     const saved = await this.typeorm.utilisateur.save(user);
 
@@ -338,6 +349,7 @@ export class AgentManagedService {
       active: user.active,
       hasSmartphone: user.hasSmartphone,
       mustChangePassword: user.mustChangePassword,
+      languePreferee: user.languePrefereeCode,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
       producteurId: producteur?.id,

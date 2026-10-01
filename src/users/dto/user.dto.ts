@@ -32,6 +32,11 @@ export class CreateUserDto {
   @ApiProperty({ example: ['MOBILE_APP', 'SMS'], required: false })
   @IsOptional()
   accessChannelPreferences?: CanalAcces[];
+
+  @ApiProperty({ example: 'fr', required: false, description: 'Code langue préférée (voir GET /langues)' })
+  @IsString()
+  @IsOptional()
+  languePreferee?: string;
 }
 
 export class UpdateUserDto {
@@ -58,6 +63,11 @@ export class UpdateUserDto {
   @ApiProperty({ example: ['MOBILE_APP', 'SMS'], required: false })
   @IsOptional()
   accessChannelPreferences?: CanalAcces[];
+
+  @ApiProperty({ example: 'fr', required: false, description: 'Code langue préférée (voir GET /langues)' })
+  @IsString()
+  @IsOptional()
+  languePreferee?: string;
 }
 
 export class UserResponseDto {
@@ -87,4 +97,7 @@ export class UserResponseDto {
 
   @ApiProperty()
   updatedAt: Date;
+
+  @ApiProperty()
+  languePreferee: string;
 }

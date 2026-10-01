@@ -15,6 +15,15 @@ export * from './journal-synchronisation.entity';
 export * from './notification.entity';
 export * from './export-donnees.entity';
 export * from './audit-log.entity';
+export * from './evaluation.entity';
+export * from './langue.entity';
+export * from './conversation.entity';
+export * from './message.entity';
+export * from './annonce-demande.entity';
+export * from './reponse-annonce-demande.entity';
+export * from './pays.entity';
+export * from './region-reference.entity';
+export * from './prix-reference.entity';
 
 // Subscription & Payment entities
 export * from './subscription.entity';
@@ -43,6 +52,15 @@ import { JournalSynchronisation } from './journal-synchronisation.entity';
 import { Notification } from './notification.entity';
 import { ExportDonnees } from './export-donnees.entity';
 import { AuditLog } from './audit-log.entity';
+import { Evaluation } from './evaluation.entity';
+import { Langue } from './langue.entity';
+import { Conversation } from './conversation.entity';
+import { Message } from './message.entity';
+import { AnnonceDemande } from './annonce-demande.entity';
+import { ReponseAnnonceDemande } from './reponse-annonce-demande.entity';
+import { Pays } from './pays.entity';
+import { RegionReference } from './region-reference.entity';
+import { PrixReference } from './prix-reference.entity';
 import { Subscription } from './subscription.entity';
 import { SubscriptionFeature } from './subscription-feature.entity';
 import { SubscriptionUsage } from './subscription-usage.entity';
@@ -66,6 +84,15 @@ export const EntityList = [
   Notification,
   ExportDonnees,
   AuditLog,
+  Evaluation,
+  Langue,
+  Conversation,
+  Message,
+  AnnonceDemande,
+  ReponseAnnonceDemande,
+  Pays,
+  RegionReference,
+  PrixReference,
   Subscription,
   SubscriptionFeature,
   SubscriptionUsage,

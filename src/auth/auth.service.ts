@@ -5,6 +5,7 @@ import * as bcrypt from 'bcrypt';
 import { TypeOrmService } from '../database/typeorm.service';
 import { RegisterDto, LoginDto, RefreshTokenDto, AuthResponseDto, ChangePasswordDto } from './dto/auth.dto';
 import { Role } from '../database/entities';
+import { LanguesService } from '../langues/langues.service';
 
 @Injectable()
 export class AuthService {
@@ -15,10 +16,13 @@ export class AuthService {
     private typeorm: TypeOrmService,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private languesService: LanguesService,
   ) {}
 
   async register(registerDto: RegisterDto): Promise<AuthResponseDto> {
     const { email, password, lastName, firstName, role, phone } = registerDto;
+    const languePrefereeCode = registerDto.languePreferee ?? 'fr';
+    await this.languesService.assertValide(languePrefereeCode);
 
     // Vérifier si l'utilisateur existe déjà
     const existingUser = await this.typeorm.utilisateur.findOne({
@@ -41,6 +45,7 @@ export class AuthService {
         firstName,
         role,
         phone,
+        languePrefereeCode,
         accessChannelPreferences: ['MOBILE_APP', 'WEB'],
       } as any);
 
@@ -167,6 +172,7 @@ export class AuthService {
         isActive: user.isActive || true,
         createdAt: user.createdAt || new Date(),
         mustChangePassword: !!user.mustChangePassword,
+        languePreferee: user.languePrefereeCode,
       },
     };
   }

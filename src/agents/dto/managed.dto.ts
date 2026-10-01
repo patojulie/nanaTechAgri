@@ -66,6 +66,11 @@ export class CreateManagedUserDto {
   @IsOptional()
   hasSmartphone?: boolean;
 
+  @ApiPropertyOptional({ example: 'fr', description: 'Code langue préférée (voir GET /langues) — défaut "fr"' })
+  @IsString()
+  @IsOptional()
+  languePreferee?: string;
+
   @ApiPropertyOptional({
     description:
       'Mot de passe temporaire généré côté app (permet de le communiquer sans connexion). ' +
@@ -100,6 +105,8 @@ export class UpdateManagedUserDto {
   phone?: string;
 
   @ApiPropertyOptional() @IsBoolean() @IsOptional() hasSmartphone?: boolean;
+
+  @ApiPropertyOptional({ example: 'fr' }) @IsString() @IsOptional() languePreferee?: string;
 
   @ApiPropertyOptional({ type: UpdateProductorDto })
   @ValidateNested()
@@ -137,6 +144,7 @@ export class ManagedUserResponseDto {
   @ApiProperty() active: boolean;
   @ApiProperty() hasSmartphone: boolean;
   @ApiProperty() mustChangePassword: boolean;
+  @ApiProperty() languePreferee: string;
   @ApiProperty() createdAt: Date;
   @ApiProperty() updatedAt: Date;
   @ApiPropertyOptional({ description: 'Producteur.id' }) producteurId?: string;

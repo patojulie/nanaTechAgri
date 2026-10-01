@@ -7,12 +7,14 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { RefreshTokenStrategy } from './strategies/refresh-token.strategy';
 import { DatabaseModule } from '../database/database.module';
+import { LanguesModule } from '../langues/langues.module';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 
 @Module({
   imports: [
     DatabaseModule,
+    LanguesModule,
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

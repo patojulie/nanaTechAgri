@@ -20,8 +20,13 @@ export class MiseEnRelation {
   @PrimaryColumn('uuid', { default: () => 'gen_random_uuid()' })
   id: string;
 
-  @Column()
+  /** Nullable : absente quand la mise en relation vient d'une AnnonceDemande (voir origineAnnonceDemandeId). */
+  @Column({ nullable: true })
   annonceId: string;
+
+  /** AnnonceDemande.id d'origine, si cette mise en relation vient de l'acceptation d'une réponse d'un producteur. */
+  @Column({ nullable: true })
+  origineAnnonceDemandeId: string;
 
   @Column()
   producteurId: string;
@@ -54,7 +59,7 @@ export class MiseEnRelation {
   commentaires: string;
 
   // Relations
-  @ManyToOne(() => Annonce, (annonce) => annonce.miseEnRelations, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Annonce, (annonce) => annonce.miseEnRelations, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn()
   annonce: Annonce;
 

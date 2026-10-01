@@ -5,7 +5,7 @@
   "author": "AGRI Intelligent",
   "license": "MIT",
   "scripts": {
-    "prebuild": "rimraf dist",
+    "prebuild": "rimraf dist tsconfig.tsbuildinfo",
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
@@ -18,7 +18,7 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "db:seed": "ts-node src/database/seed.ts",
     "db:create-admin": "ts-node src/database/create-admin.ts",
     "db:drop": "ts-node -e \"require('typeorm').createConnection().then(c => c.dropDatabase()).then(() => process.exit(0))\"",

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { join } from 'path';
 import * as Joi from 'joi';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -20,12 +21,23 @@ import { ExportModule } from './export/export.module';
 import { HealthModule } from './health/health.module';
 import { LoggingModule } from './common/logging/logging.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
+import { EvaluationsModule } from './evaluations/evaluations.module';
+import { ScoringModule } from './scoring/scoring.module';
+import { LanguesModule } from './langues/langues.module';
+import { CommunicationModule } from './communication/communication.module';
+import { ConversationsModule } from './conversations/conversations.module';
+import { AnnoncesDemandeModule } from './annonces-demande/annonces-demande.module';
+import { ReferencePrixModule } from './reference-prix/reference-prix.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
+      // Chemin absolu, calculé depuis ce fichier compilé (dist/app.module.js) plutôt que
+      // process.cwd() : sinon `.env` n'est trouvé que si le process est lancé depuis la
+      // racine agri_backend/ — un `cd dist && node main.js` le manquait silencieusement
+      // et faisait échouer la validation Joi (DATABASE_URL/JWT_SECRET "required").
+      envFilePath: join(__dirname, '..', '.env'),
       validationSchema: Joi.object({
         NODE_ENV: Joi.string()
           .valid('development', 'production', 'test')
@@ -72,6 +84,13 @@ import { SubscriptionsModule } from './subscriptions/subscriptions.module';
     NotificationsModule,
     ExportModule,
     HealthModule,
+    EvaluationsModule,
+    ScoringModule,
+    LanguesModule,
+    CommunicationModule,
+    ConversationsModule,
+    AnnoncesDemandeModule,
+    ReferencePrixModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,12 +1,16 @@
 import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
 import { TypeOrmService } from '../database/typeorm.service';
 import { CreateUserDto, UpdateUserDto, UserResponseDto } from './dto/user.dto';
+import { LanguesService } from '../langues/langues.service';
 
 @Injectable()
 export class UsersService {
   private logger = new Logger('UsersService');
 
-  constructor(private typeorm: TypeOrmService) {}
+  constructor(
+    private typeorm: TypeOrmService,
+    private languesService: LanguesService,
+  ) {}
 
   async findAll(): Promise<UserResponseDto[]> {
     const users = await this.typeorm.utilisateur.find();
@@ -47,7 +51,12 @@ export class UsersService {
         throw new NotFoundException(`Utilisateur avec l'ID ${id} non trouvé`);
       }
 
-      Object.assign(user, updateUserDto);
+      const { languePreferee, ...rest } = updateUserDto;
+      if (languePreferee) {
+        await this.languesService.assertValide(languePreferee);
+        user.languePrefereeCode = languePreferee;
+      }
+      Object.assign(user, rest);
       const updated = await this.typeorm.utilisateur.save(user);
 
       this.logger.log(`Utilisateur mis à jour: ${id}`);
@@ -100,6 +109,7 @@ export class UsersService {
       active: user.active,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
+      languePreferee: user.languePrefereeCode,
     };
   }
 }

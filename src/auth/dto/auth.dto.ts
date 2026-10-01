@@ -59,6 +59,14 @@ export class RegisterDto {
   @IsPhoneNumber('ML') // Mali par défaut
   @IsOptional()
   phone?: string;
+
+  @ApiPropertyOptional({
+    example: 'fr',
+    description: 'Code langue préférée (voir GET /langues) — défaut "fr" si omis',
+  })
+  @IsString()
+  @IsOptional()
+  languePreferee?: string;
 }
 
 /**
@@ -144,6 +152,9 @@ export class UserAuthResponseDto {
     example: false,
   })
   mustChangePassword?: boolean;
+
+  @ApiPropertyOptional({ example: 'fr', description: 'Code langue préférée' })
+  languePreferee?: string;
 }
 
 /**
